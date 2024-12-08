@@ -1,8 +1,5 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using UI;
-using UnityEngine;
+﻿using UI;
+using UnityEngine.Rendering;
 
 public static class Globals
 {
@@ -18,4 +15,5 @@ public static class Globals
     public static MenuController StartMenu;
     public static OptionsMenu OptionsMenu;
     public static MicroMenu MicroMenu;
+    public static Volume volume;
 }

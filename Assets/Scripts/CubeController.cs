@@ -35,7 +35,7 @@ public class CubeController : MonoBehaviour
         if (rigid != null)
         {
             //rigid.velocity = Gravity/2f;
-            rigid.velocity = new Vector3(0f, -5f, 0f);
+            rigid.linearVelocity = new Vector3(0f, -5f, 0f);
             rigid.angularVelocity = new Vector3(0f, 0f, 0f);
         }
 

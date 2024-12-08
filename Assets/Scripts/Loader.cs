@@ -9,6 +9,7 @@ using Newtonsoft.Json.Converters;
 using PlayModes;
 using UnityEngine;
 using UnityEngine.Analytics;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 
@@ -23,6 +24,7 @@ public class Loader : MonoBehaviour
     public AudioProcessor AudioProcessor;
     public GameObject Floor;
     public Material BackgroundMaterial;
+    public Volume Volume;
 
     public Settings Settings;
 
@@ -31,6 +33,7 @@ public class Loader : MonoBehaviour
     void Awake()
     {
         Globals.Loader = this;
+        Globals.volume = Volume;
     }
 
     void Start ()

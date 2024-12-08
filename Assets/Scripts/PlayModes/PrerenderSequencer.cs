@@ -3,16 +3,15 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Text;
 using Midi;
 using Sanford.Multimedia.Midi;
 using NMPB.Timers;
 using Shaders;
 using UnityEngine.Analytics;
 using Debug = UnityEngine.Debug;
+using UnityEngine.Rendering.HighDefinition;
+using UnityEngine.Rendering;
 
 public class PrerenderSequencer : MonoBehaviour
 {
@@ -33,6 +32,7 @@ public class PrerenderSequencer : MonoBehaviour
     private int[] _overloads;
     public double Volume = 0.5;
     private int _currentFrame;
+    private PathTracing pathTracing;
 
     private int _vSync;
     private int _captureFramerate;
@@ -136,13 +136,10 @@ public class PrerenderSequencer : MonoBehaviour
 
     void OnDestroy()
     {
-
-        if (_sequencer != null)
-            _sequencer.Dispose();
+        _sequencer?.Dispose();
         TimerFactory.IsManual = false;
         QualitySettings.vSyncCount = _vSync;
         Time.captureFramerate = _captureFramerate;
-
     }
 
     private void OnChannelMessage(object sender, ChannelMessageEventArgs e)
@@ -176,7 +173,6 @@ public class PrerenderSequencer : MonoBehaviour
     private bool _started = false;
     private long _frame = 0;
 
-
     void Update()
     {
         var bufferLength = Time.frameCount%2 == 0 ? 367 : 368;
@@ -205,7 +201,12 @@ public class PrerenderSequencer : MonoBehaviour
             ManualTimer.RaiseTick();
         }
         _queue.Update(_renderTime, NoDoubles == 1);
-        //Application.CaptureScreenshot(Path.Combine(OutDir,"img"+_currentFrame.ToString("D5") + ".png"));
+        
+        //if (Globals.volume.profile.TryGet<PathTracing>(out pathTracing))
+        //{
+        //    StartCoroutine(CaptureScreenshotWhenPathTracingComplete());
+        //}
+        ScreenCapture.CaptureScreenshot(Path.Combine(OutDir, "img" + _currentFrame.ToString("D5") + ".png"));
         WriteInfoFile(false);
 
         if (Time.frameCount % 60 == 0)
@@ -213,5 +214,23 @@ public class PrerenderSequencer : MonoBehaviour
             GC.Collect();
         }
         _currentFrame++;
+    }
+
+    private IEnumerator CaptureScreenshotWhenPathTracingComplete()
+    {
+        var renderPipeline = RenderPipelineManager.currentPipeline as HDRenderPipeline;
+        ushort samples = (ushort)pathTracing.maximumSamples;
+
+        Debug.Log("Waiting for path tracing to converge...");
+
+        renderPipeline?.BeginRecording(samples, 1F, 0.25F, 0.75F);
+        for (int i = 0; i < samples; i++)
+        {
+            renderPipeline?.PrepareNewSubFrame();
+            yield return null; // Yield to wait for the next frame
+        }
+        renderPipeline?.EndRecording();
+        Debug.Log("Path tracing completed. Capturing screenshot...");
+        //yield return null;
     }
 }

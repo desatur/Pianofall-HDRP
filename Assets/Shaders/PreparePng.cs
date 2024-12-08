@@ -8,6 +8,8 @@ using Pingu;
 using Pingu.Chunks;
 using Pingu.Colors;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.HighDefinition;
 using Debug = UnityEngine.Debug;
 using Graphics = UnityEngine.Graphics;
 
@@ -15,24 +17,6 @@ namespace Shaders
 {
     public class PreparePng : MonoBehaviour
     {
-        private static readonly bool CanUseBitmap;
-
-        static PreparePng()
-        {
-            try
-            {
-                using (new Bitmap(2,2))
-                {
-                    CanUseBitmap = true;
-                }
-            }
-            catch (Exception)
-            {
-                CanUseBitmap = false;
-            }
-            Debug.LogFormat("Can use bitmap: {0}", CanUseBitmap);
-        }
-
         private class RenderWorker
         {
             private bool _enabled = true;
@@ -40,9 +24,12 @@ namespace Shaders
             private ImageData _data;
             readonly AutoResetEvent _start = new AutoResetEvent(false);
             readonly AutoResetEvent _done = new AutoResetEvent(false);
+            internal readonly HDRenderPipeline hDRenderPipeline;
 
             public RenderWorker()
             {
+                hDRenderPipeline = (HDRenderPipeline)RenderPipelineManager.currentPipeline;
+                //var pathTracingWaiter = new Thread(Worker) { IsBackground = true };
                 var thread = new Thread(Worker) { IsBackground = true };
                 thread.Start();
             }
@@ -64,6 +51,12 @@ namespace Shaders
                 {
                     _start.Set();
                     _done.WaitOne();
+                    //hDRenderPipeline?.BeginRecording(64, 1F, 0.25F, 0.75F);
+                    //for (int i = 0; i < 64; i++)
+                    //{
+                    //    hDRenderPipeline?.PrepareNewSubFrame();
+                    //}
+                    //hDRenderPipeline?.EndRecording();
                     if (!_enabled)
                     {
                         return;
@@ -71,44 +64,27 @@ namespace Shaders
                     try
                     {
                         var data = _data;
-                        var path = Path.Combine(PrerenderSequencer.OutDir,
-                            "img" + data.CurrentFrame.ToString("D5") + ".png");
+                        var path = Path.Combine(PrerenderSequencer.OutDir, "img" + data.CurrentFrame.ToString("D5") + ".png");
                         data.CurrentFrame++;
 
-                        if (CanUseBitmap)
+                        using (var bmp = new Bitmap(data.Width, data.Height, PixelFormat.Format24bppRgb))
                         {
-                            using (var bmp = new Bitmap(data.Width, data.Height, PixelFormat.Format24bppRgb))
+                            BitmapData bits = bmp.LockBits(new Rectangle(0, 0, data.Width, data.Height), ImageLockMode.ReadWrite, PixelFormat.Format24bppRgb);
+                            if (bmp.Width%4 == 0)
                             {
-                                var bits = bmp.LockBits(new Rectangle(0, 0, data.Width, data.Height),
-                                    ImageLockMode.ReadWrite,
-                                    PixelFormat.Format24bppRgb);
-                                if (bmp.Width%4 == 0)
-                                {
-                                    Marshal.Copy(data.Data, 0, bits.Scan0, data.Data.Length);
-                                }
-                                else
-                                {
-                                    for (int h = 0; h < bits.Height; h++)
-                                    {
-                                        Marshal.Copy(data.Data, h*bits.Width*3,
-                                            new IntPtr(bits.Scan0.ToInt64() + h*bits.Stride), bits.Width*3);
-                                    }
-                                }
-                                //Debug.Log(string.Format("W: {0}, H: {1}, S: {2}, D: {3}, DW: {4}", bits.Width, bits.Height, bits.Stride, data.Width, data.Data.Length/bits.Height));
-                                bmp.UnlockBits(bits);
-                                bmp.Save(path, ImageFormat.Png);
+                                Marshal.Copy(data.Data, 0, bits.Scan0, data.Data.Length);
                             }
-                        }
-                        else
-                        {
-                            var header = new IhdrChunk(data.Width, data.Height, 8, ColorType.Truecolor);
-                            var idat = new IdatChunk(header, data.Data);
-                            var end = new IendChunk();
-                            var pngFile = new PngFile() {header, idat, end};
-                            using (var fs = new FileStream(path, FileMode.Create))
+                            else
                             {
-                                pngFile.WriteFileAsync(fs);
+                                for (int h = 0; h < bits.Height; h++)
+                                {
+                                    Marshal.Copy(data.Data, h*bits.Width*3,
+                                        new IntPtr(bits.Scan0.ToInt64() + h*bits.Stride), bits.Width*3);
+                                }
                             }
+                            //Debug.Log(string.Format("W: {0}, H: {1}, S: {2}, D: {3}, DW: {4}", bits.Width, bits.Height, bits.Stride, data.Width, data.Data.Length/bits.Height));
+                            bmp.UnlockBits(bits);
+                            bmp.Save(path, ImageFormat.Png);
                         }
                     }
                     catch (Exception e)
@@ -153,7 +129,7 @@ namespace Shaders
 
         void Start()
         {
-            _material = new Material(Shader.Find(CanUseBitmap ? "Hidden/PreparePng" : "Hidden/FlipImage"))
+            _material = new Material(Shader.Find(true ? "Hidden/PreparePng" : "Hidden/FlipImage"))
             {
                 hideFlags = HideFlags.HideAndDontSave
             };
@@ -174,7 +150,7 @@ namespace Shaders
             }
             _lastWidth = newWidth;
             _lastHeight = newHeight;
-            _tex.Resize(newWidth, newHeight);
+            _tex.Reinitialize(newWidth, newHeight);
         }
 
         private static RenderWorker[] GetWorkers(int count)
